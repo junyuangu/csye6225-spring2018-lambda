@@ -21,6 +21,8 @@ dependencies {
             'com.amazonaws:aws-lambda-java-core:+',
             'com.amazonaws:aws-lambda-java-events:+'
     )
+
+    compile(group: 'com.amazonaws', name: 'aws-java-sdk', version: '1.11.294')
 }
 
 task buildZip(type: Zip) {
