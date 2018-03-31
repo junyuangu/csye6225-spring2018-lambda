@@ -1,1 +1,3 @@
-Sample lambda function using Java8.
+Assignment8
+part: Lambda Function.
+
