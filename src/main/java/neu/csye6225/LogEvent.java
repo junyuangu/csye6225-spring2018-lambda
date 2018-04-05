@@ -1,5 +1,7 @@
 package neu.csye6225;
 
+import com.amazonaws.auth.InstanceProfileCredentialsProvider;
+import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
@@ -23,6 +25,7 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
     private DynamoDB myDynamoDB;
     //private String DYNAMODB_TABLENAME = "csye6225";
     private Regions REGION = Regions.US_EAST_1;
+    protected static final String DYNAMODB_ENDPOINT = "dynamodb.us-east-1.amazonaws.com";
     protected static String token;
     protected static String app_username;
     protected static String SES_FROM_ADDRESS; // = "noreply@csye6225-spring2018-guju.me";
@@ -40,8 +43,7 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
         context.getLogger().log( "1. Is request NULL : " + (request == null) );
         context.getLogger().log( "2. records size: " + (request.getRecords().size()) );
         context.getLogger().log(request.getRecords().get(0).getSNS().getMessage());
-        timeStamp = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss").format(Calendar.getInstance().getTime());
-        context.getLogger().log("Invocation completed: " + timeStamp);
+
 
         context.getLogger().log("---------------------test 1 completion---------------------------");
 
@@ -51,22 +53,25 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
         token = UUID.randomUUID().toString();
         context.getLogger().log( "token: " + token );
 
+        //connect to AWS DynamoDB
         this.initDynamoDbClient(context);
+        context.getLogger().log("DynamoDB client has been built.");
 
         String DBTableName = System.getenv("DynamoDB_TableName"); // "csye6225";
         context.getLogger().log("DynamoDB table name: " + DBTableName );
         SES_FROM_ADDRESS = System.getenv( "From_EmailAddress" ); //"noreply@csye6225-spring2018-guju.me";
 
-        Table tableIns = this.myDynamoDB.getTable( DBTableName );
-        if( tableIns!=null )
-            context.getLogger().log( "Get the table %s from DynamoDB" + DBTableName );
+        Table tableInstance = myDynamoDB.getTable( DBTableName );
+        if( tableInstance!=null )
+            context.getLogger().log( "Get the table from DynamoDB: " + DBTableName );
         else
             return null;
 
-        if( (tableIns.getItem( "id", app_username)) == null ) {
+        if( ( tableInstance.getItem( "id", app_username ) ) == null ) {
 
             context.getLogger().log("User's Reset Request does not exist in the dynamo db table. " +
                     "Will create new token and send an email");
+
             this.myDynamoDB.getTable(DBTableName)
                     .putItem(
                             new PutItemSpec().withItem( new Item()
@@ -76,16 +81,16 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
 
             TEXTBODY = "https://csye6225-spring2018-guju.me/reset?email=" + app_username + "&token=" + token;
             context.getLogger().log( "This is text body: " + TEXTBODY );
-            HTMLBODY = "<h3>You have successfully sent an Email using Amazon SES!</h3>"
+            HTMLBODY = "<h3>You have successfully requested an Password Reset using Amazon SES!</h3>"
                     + "<p>Please reset the password using the below link. " +
                     "Link: https://csye6225-spring2018-guju.me/reset?email=" + app_username + "&token=" + token+"</p>";
             context.getLogger().log( "This is HTML body: " + HTMLBODY );
 
-            context.getLogger().log( "step 2" );
+            context.getLogger().log( "=================step 2==============" );
             try {
-                AmazonSimpleEmailService client = AmazonSimpleEmailServiceClientBuilder.standard()
+                AmazonSimpleEmailService sesClient = AmazonSimpleEmailServiceClientBuilder.standard()
                         .withRegion( REGION ).build();
-                context.getLogger().log( "step 3" );
+                context.getLogger().log( "**************step 3******************" );
                 SendEmailRequest emailRequest = new SendEmailRequest()
                         .withDestination(
                                 new Destination().withToAddresses(app_username) )
@@ -98,9 +103,9 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
                                 .withSubject( new Content()
                                         .withCharset( "UTF-8" ).withData(EMAIL_SUBJECT) ) )
                         .withSource(SES_FROM_ADDRESS);
-                client.sendEmail( emailRequest );
-                context.getLogger().log( "step 4" );
-                System.out.println( "Email sent!" );
+                sesClient.sendEmail( emailRequest );
+                context.getLogger().log( "++++++++++++++++++step 4++++++++++++++++++++++" );
+                System.out.println( "Email successfully sent!" );
             } catch (Exception ex) {
                 System.out.println( "The email was not sent. Error message: "
                         + ex.getMessage() );
@@ -112,15 +117,24 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
         {
             context.getLogger().log("User's Reset Request exists in the dynamo db table");
         }
-
+        timeStamp = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss").format(Calendar.getInstance().getTime());
+        context.getLogger().log("Invocation completed: " + timeStamp);
         return null;
     }
 
     private void initDynamoDbClient(Context context) {
 //        String accessKey = System.getenv("accessKey");
 //        String secretKey = System.getenv("secretKey");
+        context.getLogger().log( "Enter initDynamoDbClient..." );
 
-        AmazonDynamoDB client = AmazonDynamoDBClientBuilder.defaultClient();
+        //Use the instance profile credentials
+        AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().build();
+//                .withRegion( REGION )
+//                .withEndpointConfiguration( new AwsClientBuilder.EndpointConfiguration( DYNAMODB_ENDPOINT,"us-east-1" ) )
+//                .withCredentials( new InstanceProfileCredentialsProvider(false) )
+//                .build();
+        context.getLogger().log( "create DynamoDB client via Builder." );
+        context.getLogger().log( "DynamoDB client: " + client.toString() );
 
         this.myDynamoDB = new DynamoDB(client);
     }
