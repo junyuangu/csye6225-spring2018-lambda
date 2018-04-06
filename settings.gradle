@@ -15,4 +15,4 @@ include 'api'
 include 'services:webservice'
 */
 
-rootProject.name = 'csye6225-aws-lambda'
+rootProject.name = 'csye6225-spring2018-lambda'
