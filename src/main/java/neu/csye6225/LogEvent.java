@@ -1,16 +1,12 @@
 package neu.csye6225;
 
-import com.amazonaws.auth.InstanceProfileCredentialsProvider;
-import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.amazonaws.services.dynamodbv2.document.Item;
 import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.document.UpdateItemOutcome;
 import com.amazonaws.services.dynamodbv2.document.spec.PutItemSpec;
-import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SNSEvent;
@@ -20,7 +16,6 @@ import com.amazonaws.services.simpleemail.model.*;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.UUID;
 
 public class LogEvent implements RequestHandler<SNSEvent, Object> {
@@ -45,9 +40,6 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
         context.getLogger().log( "Invocation started: " + timeStamp );
         context.getLogger().log( "1. Is request NULL : " + (request == null) );
         context.getLogger().log( "2. records size: " + (request.getRecords().size()) );
-        context.getLogger().log(request.getRecords().get(0).getSNS().getMessage());
-
-
         context.getLogger().log("---------------------test 1 completion---------------------------");
 
         //Execution
@@ -61,7 +53,7 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
         context.getLogger().log("DynamoDB client has been built.");
 
         String DBTableName = System.getenv("DynamoDB_TableName"); // "csye6225";
-        context.getLogger().log("DynamoDB table name: " + DBTableName );
+        context.getLogger().log( "DynamoDB table name: " + DBTableName );
         SES_FROM_ADDRESS = System.getenv( "From_EmailAddress" ); //"noreply@csye6225-spring2018-guju.me";
 
         Table tableInstance = myDynamoDB.getTable( DBTableName );
@@ -75,19 +67,19 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
             context.getLogger().log("User's Reset Request does not exist in the dynamo db table. " +
                     "Will create new token and send an email");
 
-            Date time = Calendar.getInstance().getTime();
+            Number terminatedTime = System.currentTimeMillis() / 1000L + 1200; //TTL=20 mins
+            context.getLogger().log( "token invalid time: " + terminatedTime );
             this.myDynamoDB.getTable(DBTableName)
                     .putItem(
                             new PutItemSpec().withItem( new Item()
                                     .withString( "id", app_username)
                                     .withString( "token", token )
-                                    .withNumber( "TTL", System.currentTimeMillis() / 1000L + 1200 ) )
-                    ); // TTL=20*60 secs
+                                    .withNumber( "ttl", terminatedTime ) ) );
 
             TEXTBODY = "https://csye6225-spring2018-guju.me/reset?email=" + app_username + "&token=" + token;
             context.getLogger().log( "This is text body: " + TEXTBODY );
             HTMLBODY = "<h3>You have successfully requested an Password Reset using Amazon SES!</h3>"
-                    + "<p>Please reset the password using the below link. " +
+                    + "<p>Please reset the password using the below link in 20 minutes.<br/> " +
                     "Link: https://csye6225-spring2018-guju.me/reset?email=" + app_username + "&token=" + token+"</p>";
             context.getLogger().log( "This is HTML body: " + HTMLBODY );
 
@@ -118,39 +110,8 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
             }
 
         }
-        else
-        {
+        else {
             context.getLogger().log("User's Reset Request exists in the dynamo db table");
-//            Item item = tableInstance.getItem( "id", app_username );
-//            Object timeBegin = item.get("timeBegin");
-//            context.getLogger().log( "timeBegin: " + new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss").format( ((Date)timeBegin).toString() ) );
-//            long terminate = ((Date) timeBegin).getTime() + 1000*60*20 ;
-//            long now = Calendar.getInstance().getTime().getTime();
-//            if( now >= terminate )
-//                return null;
-//            else {
-//                token = UUID.randomUUID().toString();
-//                context.getLogger().log( "new generated token: " + token );
-//                Date time = Calendar.getInstance().getTime();
-//                //update the new token in the table
-//                UpdateItemSpec updateItemSpec;
-//                updateItemSpec = new UpdateItemSpec().withPrimaryKey( "id", app_username )
-//                        .withUpdateExpression("set info.rating = :r, info.token=:p, info.actors=:a")
-//                        .withValueMap( new ValueMap().withNumber(":r", 5.5).withString( ":p", token )
-//                                .withList(":a", time) )
-//                        .withReturnValues(ReturnValue.UPDATED_NEW);
-//
-//                try {
-//                    System.out.println("Updating the item...");
-//                    UpdateItemOutcome outcome = tableInstance.updateItem(updateItemSpec);
-//                    System.out.println("UpdateItem succeeded:\n" + outcome.getItem().toJSONPretty());
-//
-//                }
-//                catch (Exception e) {
-//                    context.getLogger().log( e.getStackTrace().toString() );
-//                }
-//            }
-
         }
         timeStamp = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss").format(Calendar.getInstance().getTime());
         context.getLogger().log("Invocation completed: " + timeStamp);
@@ -158,8 +119,6 @@ public class LogEvent implements RequestHandler<SNSEvent, Object> {
     }
 
     private void initDynamoDbClient(Context context) {
-//        String accessKey = System.getenv("accessKey");
-//        String secretKey = System.getenv("secretKey");
         context.getLogger().log( "Enter initDynamoDbClient..." );
 
         //Use the instance profile credentials
